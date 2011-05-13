@@ -62,7 +62,7 @@ public class QuorumPeer extends Thread {
     }
 
     public enum ServerState {
-        FOLLOWING, LEADING, LOOKING
+        LOOKING, FOLLOWING, LEADING
     }
 
     private static final Logger LOG = Logger.getLogger(QuorumPeer.class);
@@ -111,6 +111,8 @@ public class QuorumPeer extends Thread {
     volatile boolean running = true;
 
     private ServerState state = ServerState.LOOKING;
+
+    PeerState currentState = null;
 
     /**
     * The number of ticks that can pass between sending a request and getting
@@ -271,29 +273,26 @@ public class QuorumPeer extends Thread {
                 case FOLLOWING:
                     try {
                         LOG.info("FOLLOWING");
-                        // setFollower(makeFollower(logFactory));
-                        // follower.followLeader();
+                        currentState = new Follower(this);
+                        currentState.execute();
                     } catch (Exception e) {
                         LOG.warn("Unexpected exception", e);
                     } finally {
-                        // follower.shutdown();
-                        // setFollower(null);
+                        currentState.shutdown();
+                        currentState = null;
                         setPeerState(ServerState.LOOKING);
                     }
                     break;
                 case LEADING:
                     LOG.info("LEADING");
                     try {
-                        // setLeader(makeLeader(logFactory));
-                        // leader.lead();
-                        // setLeader(null);
+                        currentState = new Leader(this);
+                        currentState.execute();
                     } catch (Exception e) {
                         LOG.warn("Unexpected exception", e);
                     } finally {
-                        // if (leader != null) {
-                        // leader.shutdown("Forcing shutdown");
-                        // setLeader(null);
-                        // }
+                        currentState.shutdown();
+                        currentState = null;
                         setPeerState(ServerState.LOOKING);
                     }
                     break;
@@ -355,9 +354,15 @@ public class QuorumPeer extends Thread {
     }
 
     public void shutdown() {
+        //TODO: Verify what should be shut down here
         running = false;
         if (electionAlg != null) {
             electionAlg.shutdown();
+            electionAlg = null;
+        }
+        if(currentState != null){
+            currentState.shutdown();
+            currentState = null;
         }
 
     }
@@ -384,9 +389,6 @@ public class QuorumPeer extends Thread {
         electionAlg = createElectionAlgorithm();
     }
 
-    synchronized public void stopLeaderElection() {
-    }
-
     /**
     * Check if a node is in the current view. With static membership, the
     * result of this check will never change; only when dynamic membership is
@@ -394,5 +396,9 @@ public class QuorumPeer extends Thread {
     */
     public boolean viewContains(Long sid) {
         return this.quorumPeers.containsKey(sid);
+    }
+
+    public int getDesirableSocketTimeout() {
+        return getTickTime() * getSyncLimit();
     }
 }
