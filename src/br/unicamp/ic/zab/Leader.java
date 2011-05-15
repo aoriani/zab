@@ -143,7 +143,7 @@ public class Leader implements PeerState {
                         Socket followerSocket = leaderSocket.accept();
                         followerSocket.setSoTimeout(thisPeer.getDesirableSocketTimeout());
                         followerSocket.setTcpNoDelay(Settings.TCP_NODELAY);
-                        FollowerHandler handler = new FollowerHandler();
+                        FollowerHandler handler = new FollowerHandler(Leader.this,followerSocket);
                         handler.start();
                     } catch (SocketException e) {
                         if(!run){
@@ -164,6 +164,26 @@ public class Leader implements PeerState {
             run = false;
             //TODO: consider if we should wait this thread to terminate
         }
+    }
+
+
+    public long getLastProposalId() {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+
+
+    public void processAcknowledge(long serverId, long proposalID) {
+        // TODO Auto-generated method stub
+
+    }
+
+
+
+    public void removeFollowerHandler(FollowerHandler followerHandler) {
+        // TODO Auto-generated method stub
+
     }
 
 }

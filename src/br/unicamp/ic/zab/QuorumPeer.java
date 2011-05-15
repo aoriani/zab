@@ -39,6 +39,8 @@ import org.apache.log4j.Logger;
  */
 
 public class QuorumPeer extends Thread {
+    private static final Logger LOG = Logger.getLogger(QuorumPeer.class);
+
     public static class QuorumServer {
         public InetSocketAddress addr;
 
@@ -65,7 +67,8 @@ public class QuorumPeer extends Thread {
         LOOKING, FOLLOWING, LEADING
     }
 
-    private static final Logger LOG = Logger.getLogger(QuorumPeer.class);
+    /**An invalid id for peers*/
+    public static final long INVALID_SERVER_ID = -1;
 
     /**
     * This is who I think the leader currently is.
