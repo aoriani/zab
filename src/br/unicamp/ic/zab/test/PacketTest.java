@@ -61,6 +61,18 @@ public class PacketTest {
         testSerializationHelper(packet);
     }
 
+
+    /**
+     * Tests if a end of stream packet is created, serialized and rebuilt correctly
+     *
+     * @throws IOException
+     */
+     @Test
+     public void testEndOfStreamSerialization() throws IOException {
+         Packet packet = Packet.createEndOfStream();
+         testSerializationHelper(packet);
+     }
+
     /**
     * Tests if a new leader packet is created, serialized and rebuilt correctly
     *

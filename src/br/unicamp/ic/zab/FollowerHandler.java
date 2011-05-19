@@ -14,7 +14,7 @@ public class FollowerHandler extends Thread {
     private static final Logger LOG = Logger.getLogger(FollowerHandler.class);
 
     /** Thread-safe Queue for packets to be sent to follower*/
-    LinkedBlockingQueue<Packet> outgoingPacketQueue = new LinkedBlockingQueue<Packet>();
+    private LinkedBlockingQueue<Packet> outgoingPacketQueue = new LinkedBlockingQueue<Packet>();
     private Leader leader;
     private Socket socket;
     private long serverId = QuorumPeer.INVALID_SERVER_ID;
@@ -28,55 +28,57 @@ public class FollowerHandler extends Thread {
      *
      */
     //TODO: Be careful. Using a block queue can block thread
-    //TODO: used shouldRun flag or Death PAcket
-    private class PacketSender extends Thread{
-
-        private boolean shouldRun = true;
+    private class PacketSender extends Thread {
 
         @Override
         public void run() {
-            while (shouldRun){
+            while (true) {
                 try {
                     Packet packet = outgoingPacketQueue.poll();
-
-                    if(packet != null){
-                        LOG.debug("Sending packet to "+ serverId +": " + packet);
-                        //Send packet
-                        packet.toStream(toFollowerStream);
-                    }else{
-                        //Force buffered stream to flush
+                    if (packet == null) {
+                        // We have not more packet to sent. Flush stream and
+                        // wait for next packet
                         toFollowerStream.flush();
+                        packet = outgoingPacketQueue.take();
                     }
+                    if (packet.getType() == Packet.Type.END_OF_STREAM) {
+                        // Last packet - Finish thread;
+                        break;
+                    }
+                    LOG.debug("Sending packet to " + serverId + ": " + packet);
+                    // Send packet
+                    packet.toStream(toFollowerStream);
+                } catch (InterruptedException e) {
+                    LOG.warn("Unexpected interruption", e);
+                    break; // exit thread
                 } catch (IOException e) {
-                    LOG.warn("Some error when sending packets to follower" +serverId,e);
-                    shouldRun = false;
-                    if(!socket.isClosed()){
+                    LOG.warn("Some error when sending packets to follower"
+                            + serverId, e);
+
+                    if (!socket.isClosed()) {
                         try {
                             // this will cause everything to shutdown on
                             // this learner handler and will help notify
                             // the learner/observer instantaneously
                             socket.close();
                         } catch (IOException ie) {
-                            LOG.warn("Some error when closing socket",ie);
+                            LOG.warn("Some error when closing socket", ie);
                         }
                     }
+                    break;// exit the thread
                 }
 
             }
         }
 
-        public void halt(){
-            shouldRun = false;
-        }
-
-
-
     }
 
 
     public FollowerHandler(Leader leader, Socket followerSocket) {
+        super("FollowerHandler " + followerSocket.getRemoteSocketAddress());
         this.leader = leader;
         this.socket = followerSocket;
+        leader.addFollowerHandler(this);
     }
 
 
@@ -127,7 +129,7 @@ public class FollowerHandler extends Thread {
                 return; //Finally blocks takes care of clean up
             }
             serverId = followerInfoPacket.getServerId();
-            //TODO: handler follower proposalID;
+            //TODO: handler follower proposalID for sync with leader;
 
             //Send packet leader
             long newLeaderProposalId = leader.getLastProposalId();
@@ -137,6 +139,7 @@ public class FollowerHandler extends Thread {
 
             //start send queued packets
             packetSender = new PacketSender();
+            packetSender.setName("PacketSender #"+serverId +"@"+ socket.getRemoteSocketAddress());
             packetSender.start();
 
             handleIncommingPacket();
@@ -153,12 +156,16 @@ public class FollowerHandler extends Thread {
             }
 
         } finally{
-            LOG.warn("Handler for "+serverId+"@"+ socket.getRemoteSocketAddress()+"is finishing");
+            LOG.warn("Handler for "+serverId+"@"+ (socket!= null?
+                    socket.getRemoteSocketAddress():"<unknown>")+"is finishing");
+            try {
+                outgoingPacketQueue.put(Packet.createEndOfStream());
+            } catch (InterruptedException e) {
+                LOG.warn("Ignoring unexpected exception", e);
+            }
             shutdown();
         }
     }
-
-
 
     private void handleIncommingPacket() throws IOException {
         while(true){
@@ -202,11 +209,6 @@ public class FollowerHandler extends Thread {
                 LOG.warn("Ignoring exception when closing socket",e);
             }
         }
-
-        if(packetSender != null){
-            packetSender.halt();
-        }
-
         interrupt(); //stop the thread
         leader.removeFollowerHandler(this);
 

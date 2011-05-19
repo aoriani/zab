@@ -10,20 +10,14 @@ import org.apache.log4j.Logger;
 import br.unicamp.ic.zab.QuorumPeer.QuorumServer;
 
 public class Follower implements PeerState {
-
     private static final Logger LOG = Logger.getLogger(Follower.class);
 
-
     private QuorumPeer thisPeer;
-
-
     private Socket socketToLeader = null;
-
 
     public Follower(QuorumPeer peer){
         thisPeer = peer;
     }
-
 
     private InetSocketAddress discoverLeaderAddress(){
         InetSocketAddress result = null;

@@ -36,7 +36,12 @@ public class Packet {
         /** Leader and Followers exchange ping to check for node liveness*/
         PING,
         /**When follower connects to leader, follower send its current state to leader */
-        FOLLOWERINFO;
+        FOLLOWERINFO,
+        /**End of Stream - to mark the end of stream of packets. Used, for instance,
+         * in consumer thread using a blocking queue. It remains blocked until a packet comes
+         * preventing the thread from finish. This "poisoned" packet unblocks the queue and
+         * sinalizes the thread to finish*/
+        END_OF_STREAM;
 
         /**
          * For serialization purposes, convert an int to Type
@@ -57,6 +62,8 @@ public class Packet {
                     return PING;
                 case 5:
                     return FOLLOWERINFO;
+                case 6:
+                    return END_OF_STREAM;
                 default:
                     throw new IllegalArgumentException("" + i + " does not match a packet type");
             }
@@ -80,6 +87,8 @@ public class Packet {
                     return 4;
                 case FOLLOWERINFO:
                     return 5;
+                case END_OF_STREAM:
+                    return 6;
                 default:
                     throw new IllegalStateException("Forget to implement value() for " + this);
             }
@@ -179,6 +188,7 @@ public class Packet {
             break;
 
             case PING:
+            case END_OF_STREAM:
                 packet.proposalID = INVALID_PROPOSAL_ID;
                 packet.payload = null;
             break;
@@ -259,6 +269,14 @@ public class Packet {
     public static Packet createPing(){
         Packet packet  = new Packet();
         packet.type = Type.PING;
+        packet.proposalID = INVALID_PROPOSAL_ID;
+        packet.payload = null;
+        return packet;
+    }
+
+    public static Packet createEndOfStream(){
+        Packet packet = new Packet();
+        packet.type = Type.END_OF_STREAM;
         packet.proposalID = INVALID_PROPOSAL_ID;
         packet.payload = null;
         return packet;

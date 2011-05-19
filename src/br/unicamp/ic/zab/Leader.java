@@ -7,6 +7,9 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.log4j.Logger;
 
@@ -38,6 +41,11 @@ public class Leader implements PeerState {
      */
     QuorumPeer thisPeer;
 
+    /**List of handler for connected followers*/
+    List<FollowerHandler> followers = new LinkedList<FollowerHandler>();
+
+    /**The proposal id that is increment at each new proposal*/
+    AtomicLong proposalId;
 
 
     public Leader(QuorumPeer peer) throws IOException{
@@ -45,6 +53,7 @@ public class Leader implements PeerState {
         try {
             leaderSocket = new ServerSocket(thisPeer.getQuorumAddress().getPort());
             LOG.debug("Bound to port "+ thisPeer.getQuorumAddress().getPort());
+            proposalId = new AtomicLong(peer.getLastLoggedZxid());
         } catch (IOException e) {
             LOG.error("Error while binding  leader socket", e);
             throw e;
@@ -135,6 +144,10 @@ public class Leader implements PeerState {
 
         private volatile boolean run = true;
 
+        public FollowerConnectionAcceptor(){
+            super("FollowerConnectionAcceptor");
+        }
+
         @Override
         public void run() {
             try {
@@ -168,22 +181,88 @@ public class Leader implements PeerState {
 
 
     public long getLastProposalId() {
-        // TODO Auto-generated method stub
-        return 0;
+        long currentProposalId = proposalId.get();
+        return currentProposalId;
+    }
+
+    public long getNextProposalId(){
+        //TODO: How to control the number of inFlightPackets;
+        long nextProposalId = proposalId.incrementAndGet();
+        return nextProposalId;
     }
 
 
 
     public void processAcknowledge(long serverId, long proposalID) {
-        // TODO Auto-generated method stub
+        //Check it it is for the leader proposal, if not let the stage to
+        //take care
 
     }
 
 
+    /**
+     * Adds handler to follower from leader's list
+     * @param followerHandler the handler to be added
+     */
+    public void addFollowerHandler(FollowerHandler followerHandler) {
+        synchronized(followers){
+            followers.add(followerHandler);
+        }
+    }
 
+    /**
+     * Removes handler to follower from leader's list
+     * @param followerHandler the handler to be removed
+     */
     public void removeFollowerHandler(FollowerHandler followerHandler) {
+        synchronized(followers){
+            followers.remove(followerHandler);
+        }
+    }
+
+
+
+    /**
+     * Send a packet to all follower
+     * @param packet the packet to be sent
+     */
+    public void sendPacketToFollowers(Packet packet) {
+        //FIXME: Only send to synced followers
+        synchronized(followers){
+            for(FollowerHandler handler:followers){
+                handler.queuePacketToFollower(packet);
+            }
+        }
+
+    }
+
+    /**
+    * Get the server id for leader
+    * @return the id of leader in the quorum
+    */
+    public Long getId() {
+        return thisPeer.getId();
+    }
+
+    /**
+    * Get the quorum verifier used by this peer
+    * @return a quorum verifier object
+    */
+    public QuorumVerifier getQuorumVerifier() {
+        return thisPeer.getQuorumVerifier();
+    }
+
+
+
+    public void deliver(byte[] payload) {
         // TODO Auto-generated method stub
 
     }
+
+
+
+
+
+
 
 }
