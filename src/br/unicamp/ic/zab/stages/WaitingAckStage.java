@@ -50,7 +50,7 @@ public class WaitingAckStage implements PipelineStage {
             //FIXME When log is implemented ,
             //leader ack shall be added by other stage
             p.ackset.add(leader.getId());
-            waitingQuorumProposal.put(proposal.getProposalID(), p);
+            waitingQuorumProposal.put(proposal.getProposalId(), p);
         }
     }
 

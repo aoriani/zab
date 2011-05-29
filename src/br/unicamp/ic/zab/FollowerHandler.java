@@ -6,73 +6,20 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.log4j.Logger;
 
 public class FollowerHandler extends Thread {
     private static final Logger LOG = Logger.getLogger(FollowerHandler.class);
 
-    /** Thread-safe Queue for packets to be sent to follower*/
-    private LinkedBlockingQueue<Packet> outgoingPacketQueue = new LinkedBlockingQueue<Packet>();
     private Leader leader;
     private Socket socket;
     private long serverId = QuorumPeer.INVALID_SERVER_ID;
-    private DataOutputStream toFollowerStream;
     private DataInputStream fromFollowerStream;
+    private DataOutputStream toFollowerStream;
     private PacketSender packetSender;
 
-    /**
-     *  Utility class to send packet to follower
-     * @author andre
-     *
-     */
-    //TODO: Be careful. Using a block queue can block thread
-    private class PacketSender extends Thread {
-
-        @Override
-        public void run() {
-            while (true) {
-                try {
-                    Packet packet = outgoingPacketQueue.poll();
-                    if (packet == null) {
-                        // We have not more packet to sent. Flush stream and
-                        // wait for next packet
-                        toFollowerStream.flush();
-                        packet = outgoingPacketQueue.take();
-                    }
-                    if (packet.getType() == Packet.Type.END_OF_STREAM) {
-                        // Last packet - Finish thread;
-                        break;
-                    }
-                    LOG.debug("Sending packet to " + serverId + ": " + packet);
-                    // Send packet
-                    packet.toStream(toFollowerStream);
-                } catch (InterruptedException e) {
-                    LOG.warn("Unexpected interruption", e);
-                    break; // exit thread
-                } catch (IOException e) {
-                    LOG.warn("Some error when sending packets to follower"
-                            + serverId, e);
-
-                    if (!socket.isClosed()) {
-                        try {
-                            // this will cause everything to shutdown on
-                            // this learner handler and will help notify
-                            // the learner/observer instantaneously
-                            socket.close();
-                        } catch (IOException ie) {
-                            LOG.warn("Some error when closing socket", ie);
-                        }
-                    }
-                    break;// exit the thread
-                }
-
-            }
-        }
-
-    }
-
+    private long tickOfLastAck;
 
     public FollowerHandler(Leader leader, Socket followerSocket) {
         super("FollowerHandler " + followerSocket.getRemoteSocketAddress());
@@ -132,14 +79,12 @@ public class FollowerHandler extends Thread {
             //TODO: handler follower proposalID for sync with leader;
 
             //Send packet leader
-            long newLeaderProposalId = leader.getLastProposalId();
-            Packet newLeaderPacket = Packet.createNewLeader(newLeaderProposalId);
+            Packet newLeaderPacket = Packet.createNewLeader(leader.getNewLeaderProposalId());
             newLeaderPacket.toStream(toFollowerStream);
             toFollowerStream.flush();
 
             //start send queued packets
-            packetSender = new PacketSender();
-            packetSender.setName("PacketSender #"+serverId +"@"+ socket.getRemoteSocketAddress());
+            packetSender = new PacketSender(socket,toFollowerStream,serverId);
             packetSender.start();
 
             handleIncommingPacket();
@@ -151,31 +96,34 @@ public class FollowerHandler extends Thread {
                 try {
                     socket.close();
                 } catch(IOException ie) {
-                    // do nothing
+                    LOG.warn("Unexpected exception while closing the socket");
                 }
             }
 
+        } catch (InterruptedException e) {
+            LOG.error("Unexpected exception causing shutdown",e);
         } finally{
-            LOG.warn("Handler for "+serverId+"@"+ (socket!= null?
+            LOG.info("Handler for "+serverId+"@"+ (socket!= null?
                     socket.getRemoteSocketAddress():"<unknown>")+"is finishing");
-            try {
-                outgoingPacketQueue.put(Packet.createEndOfStream());
-            } catch (InterruptedException e) {
-                LOG.warn("Ignoring unexpected exception", e);
-            }
             shutdown();
         }
     }
 
-    private void handleIncommingPacket() throws IOException {
+    private void handleIncommingPacket() throws IOException, InterruptedException {
         while(true){
+
+            tickOfLastAck = leader.getTick();
+
             Packet packet = Packet.fromStream(fromFollowerStream);
 
             LOG.debug("Received packet from "+serverId+": "+packet);
 
             switch(packet.getType()){
                 case ACKNOWLEDGE:
-                    leader.processAcknowledge(serverId,packet.getProposalID());
+                    leader.processAcknowledge(serverId,packet.getProposalId());
+                break;
+                case REQUEST:
+                    leader.propose(packet.getPayload());
                 break;
                 case PING:
                     // Follower responded to ping from leader
@@ -190,11 +138,11 @@ public class FollowerHandler extends Thread {
     /**
     * Queue a packet that will be later sent to follower
     * @param packet the packet to be sent to the follower of this handler
+     * @throws InterruptedException
     */
-    public void queuePacketToFollower(Packet packet){
-        outgoingPacketQueue.add(packet);
+    public void queuePacketToFollower(Packet packet) throws InterruptedException{
+        packetSender.enqueuePacket(packet);
     }
-
 
     public void shutdown(){
         //TODO: call this from leader to every follower
@@ -209,9 +157,35 @@ public class FollowerHandler extends Thread {
                 LOG.warn("Ignoring exception when closing socket",e);
             }
         }
+
+        try {
+            if(packetSender != null){
+                //Ensure we finish the sender thread
+                packetSender.enqueuePacket(Packet.createEndOfStream());
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("Ignoring unexpected exception", e);
+        }
+
         interrupt(); //stop the thread
         leader.removeFollowerHandler(this);
 
+    }
+
+    public long getServerId(){
+        return serverId;
+    }
+
+
+    public void ping() throws InterruptedException {
+        Packet ping = Packet.createPing();
+        packetSender.enqueuePacket(ping);
+
+    }
+
+    public boolean synced() {
+        return isAlive()
+        && tickOfLastAck >= leader.getTick() - leader.getSyncLimit();
     }
 
 }

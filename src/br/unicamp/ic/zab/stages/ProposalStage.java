@@ -20,6 +20,7 @@ public class ProposalStage extends Thread implements PipelineStage {
     private PipelineStage nextStage;
 
     public ProposalStage(Leader leader, PipelineStage nextStage){
+        super("ProposalStage");
         this.leader = leader;
         this.nextStage = nextStage;
     }

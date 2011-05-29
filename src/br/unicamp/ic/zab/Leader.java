@@ -7,11 +7,18 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.log4j.Logger;
+
+import br.unicamp.ic.zab.stages.DeliverStage;
+import br.unicamp.ic.zab.stages.ProposalStage;
+import br.unicamp.ic.zab.stages.SendCommitStage;
+import br.unicamp.ic.zab.stages.WaitingAckStage;
 
 /**
  * This implements the leader state
@@ -45,7 +52,24 @@ public class Leader implements PeerState {
     List<FollowerHandler> followers = new LinkedList<FollowerHandler>();
 
     /**The proposal id that is increment at each new proposal*/
-    AtomicLong proposalId;
+    AtomicLong currentProposalId;
+
+    private int tick;
+
+
+
+    private long newLeaderProposalId;
+    private HashSet<Long> newLeaderProposalAckSet;
+
+
+    //The Pipeline
+    ProposalStage proposalStage;
+    WaitingAckStage waitingAckStage;
+    SendCommitStage sendCommitStage;
+    DeliverStage deliverStage;
+
+    CountDownLatch readyForProposalsLatch = new CountDownLatch(1) ;
+
 
 
     public Leader(QuorumPeer peer) throws IOException{
@@ -53,7 +77,7 @@ public class Leader implements PeerState {
         try {
             leaderSocket = new ServerSocket(thisPeer.getQuorumAddress().getPort());
             LOG.debug("Bound to port "+ thisPeer.getQuorumAddress().getPort());
-            proposalId = new AtomicLong(peer.getLastLoggedZxid());
+            currentProposalId = new AtomicLong(peer.getLastLoggedZxid());
         } catch (IOException e) {
             LOG.error("Error while binding  leader socket", e);
             throw e;
@@ -61,12 +85,23 @@ public class Leader implements PeerState {
     }
 
 
+    private void setupPipeline(){
+        deliverStage = new DeliverStage(this);
+        deliverStage.start();
+        sendCommitStage = new SendCommitStage(this, deliverStage);
+        sendCommitStage.start();
+        waitingAckStage = new WaitingAckStage(this, sendCommitStage);
+        proposalStage = new ProposalStage(this, waitingAckStage);
+        proposalStage.start();
+
+    }
+
 
     /* (non-Javadoc)
      * @see br.unicamp.ic.zab.PeerState#execute()
      */
     @Override
-    public void execute() {
+    public void execute() throws InterruptedException {
         /*
          * Algorithm
          * Set tick to zero
@@ -97,22 +132,101 @@ public class Leader implements PeerState {
          *
          *
          */
+
+        final int tickTime = thisPeer.getTickTime();
+        tick = 0;
+
+        //set a new epoch
+        long previousEpoch = thisPeer.getLastLoggedZxid() >> 32L;//Bring 4 higher bytes to lower bytes
+        long nextEpoch = (++previousEpoch) << 32L; //Increment and bring back
+        currentProposalId.set(nextEpoch);
+
+        //Create the new leader
+        newLeaderProposalId = getLastProposalId();
+        newLeaderProposalAckSet = new HashSet<Long>();
+        newLeaderProposalAckSet.add(getId()); //Add the leader to its quorum
+
+        //setPipeline
+        setupPipeline();
+
+        //Create the thread to wait for the followers
         connectionAcceptor = new FollowerConnectionAcceptor();
         connectionAcceptor.start();
 
-        //FIXME:Debug
-        while(true){
-            try {
-                Thread.sleep(1000);
-                LOG.debug("LEADER DEBUG IDLE LOOP");
-            } catch (InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
+        // We have to get at least a majority of servers in sync with
+        // us. We do this by waiting for the NEWLEADER packet to get
+        // acknowledged
+        while (!thisPeer.getQuorumVerifier().containsQuorum(
+                newLeaderProposalAckSet)) {
+            if (tick > thisPeer.getSyncLimit()) {
+                // Follower are not syncing fast enough
+                // renounce leadership
+                if (LOG.isInfoEnabled()) {
+                    StringBuilder builder = new StringBuilder();
+                    builder.append("Only synced with { ");
+                    for (Long server : newLeaderProposalAckSet) {
+                        builder.append(server).append(" ");
+                    }
+                    builder.append("} . So no quorum, renouncing leadership");
+                }
+                shutdown();
 
+                HashSet<Long> followerSet = new HashSet<Long>();
+                for (FollowerHandler f : followers)
+                    followerSet.add(f.getId());
+
+                if (this.getQuorumVerifier().containsQuorum(followerSet)) {
+                    // if (followers.size() >= self.quorumPeers.size() / 2) {
+                    LOG.warn("Enough followers present. "
+                            + "Perhaps the initTicks need to be increased.");
+                }
+                //Exit the leader state
+                return;
             }
+            Thread.sleep(tickTime);
+            tick++;
         }
 
+        //Now that we have quorum, we can propose
+        readyForProposalsLatch.countDown();
+        LOG.info("Leader read to receive proposals");
 
+        // We ping twice a tick, so we only update the tick every other
+        // iteration
+        boolean tickSkip = true;
+
+        while (true) {
+            Thread.sleep(tickTime / 2);
+            if (!tickSkip) {
+                tick++;
+            }
+            int syncedCount = 0;
+            HashSet<Long> syncedSet = new HashSet<Long>();
+
+            // lock on the followers when we use it.
+            syncedSet.add(getId());
+            synchronized (followers) {
+                for (FollowerHandler f : followers) {
+                    if (f.synced()) {
+                        syncedCount++;
+                        syncedSet.add(f.getServerId());
+                    }
+                    f.ping();
+                }
+            }
+          if (!tickSkip && !thisPeer.getQuorumVerifier().containsQuorum(syncedSet)) {
+            //if (!tickSkip && syncedCount < self.quorumPeers.size() / 2) {
+                // Lost quorum, shutdown
+              // TODO: message is wrong unless majority quorums used
+                LOG.info("Only " + syncedCount + " followers, need "
+                        + (thisPeer.getView().size() / 2));
+                // make sure the order is the same!
+                // the leader goes to looking
+                shutdown();
+                return;
+          }
+          tickSkip = !tickSkip;
+        }
     }
 
     /* (non-Javadoc)
@@ -130,6 +244,9 @@ public class Leader implements PeerState {
             LOG.info("Leader Socket closed with exception",e);
         }
 
+        if(proposalStage != null){
+            proposalStage.shutdown();
+        }
 
     }
 
@@ -181,21 +298,29 @@ public class Leader implements PeerState {
 
 
     public long getLastProposalId() {
-        long currentProposalId = proposalId.get();
-        return currentProposalId;
+        long proposalId = currentProposalId.get();
+        return proposalId;
     }
 
     public long getNextProposalId(){
         //TODO: How to control the number of inFlightPackets;
-        long nextProposalId = proposalId.incrementAndGet();
-        return nextProposalId;
+        long proposalId = currentProposalId.incrementAndGet();
+        return proposalId;
     }
 
 
 
-    public void processAcknowledge(long serverId, long proposalID) {
-        //Check it it is for the leader proposal, if not let the stage to
-        //take care
+    public synchronized void processAcknowledge(long serverId, long proposalId)
+        throws InterruptedException {
+        //Check if it is for the new leader proposal
+        //if not , let the right stage to take care
+        if(proposalId == newLeaderProposalId){
+            synchronized(newLeaderProposalAckSet){
+                newLeaderProposalAckSet.add(serverId);
+            }
+        }else{
+            waitingAckStage.processAck(serverId,proposalId);
+        }
 
     }
 
@@ -225,8 +350,9 @@ public class Leader implements PeerState {
     /**
      * Send a packet to all follower
      * @param packet the packet to be sent
+     * @throws InterruptedException
      */
-    public void sendPacketToFollowers(Packet packet) {
+    public void sendPacketToFollowers(Packet packet) throws InterruptedException {
         //FIXME: Only send to synced followers
         synchronized(followers){
             for(FollowerHandler handler:followers){
@@ -252,17 +378,35 @@ public class Leader implements PeerState {
         return thisPeer.getQuorumVerifier();
     }
 
+    @Override
+    public synchronized void deliver(byte[] payload) {
+        thisPeer.deliver(payload);
+    }
 
+    public long getNewLeaderProposalId() {
+        return newLeaderProposalId;
+    }
 
-    public void deliver(byte[] payload) {
-        // TODO Auto-generated method stub
+    //synchronized to ensure packet are queue in the same order proposal id
+    // is generated , so packets in queue are always ordered
+    @Override
+    public synchronized void propose(byte[] data) throws InterruptedException{
 
+        //Wait until leader is ready to send proposal
+        readyForProposalsLatch.await();
+
+        long proposalId = getNextProposalId();
+        Packet proposal = Packet.createProposal(proposalId, data);
+        proposalStage.receiveFromPreviousStage(proposal);
     }
 
 
+    public long getTick(){
+        return tick;
+    }
 
-
-
-
+    public long getSyncLimit(){
+        return thisPeer.getSyncLimit();
+    }
 
 }

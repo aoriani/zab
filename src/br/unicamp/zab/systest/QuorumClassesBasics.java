@@ -1,4 +1,4 @@
-package br.unicamp.ic.zab.test;
+package br.unicamp.zab.systest;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

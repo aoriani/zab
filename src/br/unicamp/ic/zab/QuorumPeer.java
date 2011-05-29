@@ -82,7 +82,7 @@ public class QuorumPeer extends Thread {
     /**
     * The number of ticks that the initial synchronization phase can take
     */
-    protected int initLimit;
+    private int initLimit;
 
     /**
     * The id of this server
@@ -109,7 +109,7 @@ public class QuorumPeer extends Thread {
     /**
     * The servers that make up the cluster
     */
-    protected Map<Long, QuorumServer> quorumPeers;
+    Map<Long, QuorumServer> quorumPeers;
 
     volatile boolean running = true;
 
@@ -121,17 +121,16 @@ public class QuorumPeer extends Thread {
     * The number of ticks that can pass between sending a request and getting
     * an acknowledgment
     */
-    protected int syncLimit;
-
-    /**
-    * The current tick
-    */
-    protected int tick;
+    int syncLimit;
 
     /**
     * The number of milliseconds of each tick
     */
-    protected int tickTime;
+    int tickTime;
+
+
+    private Callback callback;
+
 
     public QuorumPeer(Map<Long, QuorumServer> quorumPeers, long myid,
             int tickTime, int initLimit, int syncLimit) throws IOException {
@@ -224,13 +223,6 @@ public class QuorumPeer extends Thread {
     */
     public int getSyncLimit() {
         return syncLimit;
-    }
-
-    /**
-    * Get the current tick
-    */
-    public int getTick() {
-        return tick;
     }
 
     /**
@@ -403,5 +395,13 @@ public class QuorumPeer extends Thread {
 
     public int getDesirableSocketTimeout() {
         return getTickTime() * getSyncLimit();
+    }
+
+    public void deliver(byte[] payload) {
+        long start = System.currentTimeMillis();
+        callback.deliver(payload);
+        long end = System.currentTimeMillis();
+        LOG.debug("Delivery took " + (end-start) + "ms");
+
     }
 }

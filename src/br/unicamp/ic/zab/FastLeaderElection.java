@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-
 import org.apache.log4j.Logger;
 
 import br.unicamp.ic.zab.QuorumCnxManager.Message;

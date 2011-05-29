@@ -13,8 +13,8 @@ import org.junit.Test;
 
 import br.unicamp.ic.zab.Leader;
 import br.unicamp.ic.zab.Packet;
-import br.unicamp.ic.zab.stages.ProposalStage;
 import br.unicamp.ic.zab.stages.PipelineStage;
+import br.unicamp.ic.zab.stages.ProposalStage;
 
 
 @UsingMocksAndStubs({Leader.class})
@@ -24,7 +24,7 @@ public class ProposalStageTest {
      * @author andre
      *
      */
-    private static class DummyStage implements PipelineStage {
+    private final static class DummyStage implements PipelineStage {
         public boolean shutdownCalled = false;
 
         @Override
@@ -101,18 +101,18 @@ public class ProposalStageTest {
                 switch(times){
                     case 1:
                         assertEquals("We should have received the first package first",
-                                1, p1.getProposalID());
+                                1, p1.getProposalId());
                     break;
                     case 2:
                         assertEquals("We should have received the second package second",
-                                2, p2.getProposalID());
+                                2, p2.getProposalId());
                     break;
                 }
             }
 
         };
 
-        class DummyStage2 implements PipelineStage {
+        final class DummyStage2 implements PipelineStage {
             int times = 0;
             @Override
             public void receiveFromPreviousStage(Packet proposal)

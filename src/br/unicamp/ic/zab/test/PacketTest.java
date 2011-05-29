@@ -119,6 +119,13 @@ public class PacketTest {
         testSerializationHelper(packet);
     }
 
+    @Test
+    public void testRequestSerialization() throws IOException {
+        byte[] payload = { (byte) 0xde, (byte) 0xad, (byte) 0xbe, (byte) 0xef };
+        Packet packet = Packet.createRequest(payload);
+        testSerializationHelper(packet);
+    }
+
     /**
     * Tests if for a follower info packet, the server id is stored in payload
     * correctly

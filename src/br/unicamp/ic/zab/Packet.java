@@ -37,6 +37,8 @@ public class Packet {
         PING,
         /**When follower connects to leader, follower send its current state to leader */
         FOLLOWERINFO,
+        /**Packet for follower to send to leader the proposal they want to do */
+        REQUEST,
         /**End of Stream - to mark the end of stream of packets. Used, for instance,
          * in consumer thread using a blocking queue. It remains blocked until a packet comes
          * preventing the thread from finish. This "poisoned" packet unblocks the queue and
@@ -63,6 +65,8 @@ public class Packet {
                 case 5:
                     return FOLLOWERINFO;
                 case 6:
+                    return REQUEST;
+                case 7:
                     return END_OF_STREAM;
                 default:
                     throw new IllegalArgumentException("" + i + " does not match a packet type");
@@ -87,8 +91,10 @@ public class Packet {
                     return 4;
                 case FOLLOWERINFO:
                     return 5;
-                case END_OF_STREAM:
+                case REQUEST:
                     return 6;
+                case END_OF_STREAM:
+                    return 7;
                 default:
                     throw new IllegalStateException("Forget to implement value() for " + this);
             }
@@ -109,7 +115,7 @@ public class Packet {
         return type;
     }
 
-    public long getProposalID(){
+    public long getProposalId(){
         return proposalID;
     }
 
@@ -201,6 +207,13 @@ public class Packet {
                 in.readFully(packet.payload);
             break;
 
+            case REQUEST:
+                packet.proposalID = INVALID_PROPOSAL_ID;
+                int payloadSize2 = in.readInt();
+                packet.payload = new byte[payloadSize2];
+                in.readFully(packet.payload);
+            break;
+
             default:
                 throw new IllegalArgumentException("Unexpected packet type");
         }
@@ -227,7 +240,7 @@ public class Packet {
             break;
         }
 
-        if(type == Type.PROPOSAL || type == Type.FOLLOWERINFO){
+        if(type == Type.PROPOSAL || type == Type.FOLLOWERINFO || type == Type.REQUEST){
             out.writeInt(payload.length);
             out.write(payload);
         }
@@ -238,7 +251,7 @@ public class Packet {
         Packet packet  = new Packet();
         packet.type = Type.PROPOSAL;
         packet.proposalID = proposalId;
-        packet.payload = buffer; // Should I copy ?
+        packet.payload = Arrays.copyOf(buffer, buffer.length);
         return packet;
     }
 
@@ -274,6 +287,14 @@ public class Packet {
         return packet;
     }
 
+    public static Packet createRequest(byte[] buffer){
+        Packet packet  = new Packet();
+        packet.type = Type.REQUEST;
+        packet.proposalID = INVALID_PROPOSAL_ID;
+        packet.payload = Arrays.copyOf(buffer, buffer.length);
+        return packet;
+    }
+
     public static Packet createEndOfStream(){
         Packet packet = new Packet();
         packet.type = Type.END_OF_STREAM;
@@ -293,6 +314,11 @@ public class Packet {
         return packet;
     }
 
+    /**
+     * Read from packet server id of follower from
+     * a FOLLOWERINFO packet
+     * @return the server id of the follower
+     */
     public long getServerId(){
         final int SIZEOF_LONG = 8;
         if(type != Type.FOLLOWERINFO || payload == null || payload.length != SIZEOF_LONG){

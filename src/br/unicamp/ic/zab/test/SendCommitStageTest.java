@@ -13,16 +13,16 @@ import org.junit.Test;
 
 import br.unicamp.ic.zab.Leader;
 import br.unicamp.ic.zab.Packet;
-import br.unicamp.ic.zab.stages.CommitStage;
 import br.unicamp.ic.zab.stages.PipelineStage;
+import br.unicamp.ic.zab.stages.SendCommitStage;
 
 /**
- * Tests CommitStage
+ * Tests SendCommitStage
  * @author andre
  *
  */
 @UsingMocksAndStubs({Leader.class})
-public class CommitStageTest {
+public class SendCommitStageTest {
 
     /**
      * Dummy PipelineStage, only to test if shutdown was called
@@ -54,7 +54,7 @@ public class CommitStageTest {
     @Test(timeout=5000)
     public void testSimpleShutdown() throws IOException, InterruptedException{
         DummyStage dummyStage = new DummyStage();
-        CommitStage stage = new CommitStage(new Leader(null), dummyStage);
+        SendCommitStage stage = new SendCommitStage(new Leader(null), dummyStage);
         stage.start();
         Thread.sleep(1000);
         stage.shutdown();
@@ -71,7 +71,7 @@ public class CommitStageTest {
     @Test(timeout=5000)
     public void testInterrupt() throws IOException, InterruptedException{
         DummyStage dummyStage = new DummyStage();
-        CommitStage stage = new CommitStage(new Leader(null), dummyStage);
+        SendCommitStage stage = new SendCommitStage(new Leader(null), dummyStage);
         stage.start();
         Thread.sleep(1000);
         stage.interrupt();
@@ -106,18 +106,18 @@ public class CommitStageTest {
                 switch(times){
                     case 1:
                         assertEquals("We should have received the first package first",
-                                1, p1.getProposalID());
+                                1, p1.getProposalId());
                     break;
                     case 2:
                         assertEquals("We should have received the second package second",
-                                2, p2.getProposalID());
+                                2, p2.getProposalId());
                     break;
                 }
             }
 
         };
 
-        class DummyStage2 implements PipelineStage {
+        final class DummyStage2 implements PipelineStage {
             int times = 0;
             @Override
             public void receiveFromPreviousStage(Packet proposal)
@@ -140,7 +140,7 @@ public class CommitStageTest {
         }
 
         DummyStage2 dummyStage = new DummyStage2();
-        CommitStage stage = new CommitStage(new Leader(null),dummyStage);
+        SendCommitStage stage = new SendCommitStage(new Leader(null),dummyStage);
         stage.start();
         stage.receiveFromPreviousStage(p1);
         stage.receiveFromPreviousStage(p2);

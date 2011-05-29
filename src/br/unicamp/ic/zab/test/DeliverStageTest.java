@@ -1,5 +1,7 @@
 package br.unicamp.ic.zab.test;
 
+import static org.junit.Assert.assertTrue;
+
 import java.io.IOException;
 import java.util.Arrays;
 
@@ -8,7 +10,6 @@ import mockit.MockUp;
 import mockit.UsingMocksAndStubs;
 
 import org.junit.Test;
-import static org.junit.Assert.*;
 
 import br.unicamp.ic.zab.Leader;
 import br.unicamp.ic.zab.Packet;

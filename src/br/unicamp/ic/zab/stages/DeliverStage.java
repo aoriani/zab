@@ -4,19 +4,20 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.log4j.Logger;
 
-import br.unicamp.ic.zab.Leader;
 import br.unicamp.ic.zab.Packet;
+import br.unicamp.ic.zab.PeerState;
 
 public class DeliverStage extends Thread implements PipelineStage {
 //TODO: Deliver , Commit and proposal stages are candidates to factorization
     private static final Logger LOG = Logger.getLogger(DeliverStage.class);
 
-    private Leader leader;
+    private PeerState peerStage;
     private LinkedBlockingQueue<Packet> tobeDelivered = new LinkedBlockingQueue<Packet>();
 
 
-    public DeliverStage(Leader leader){
-        this.leader = leader;
+    public DeliverStage(PeerState leader){
+        super("DeliverStage");
+        this.peerStage = leader;
     }
 
     @Override
@@ -36,8 +37,8 @@ public class DeliverStage extends Thread implements PipelineStage {
                     // Quit the thread since there won't be more work
                     break;
                 }
-                LOG.debug("Delivering proposal " + proposal.getProposalID());
-                leader.deliver(proposal.getPayload());
+                LOG.debug("Delivering proposal " + proposal.getProposalId());
+                peerStage.deliver(proposal.getPayload());
             }
 
         } catch (InterruptedException e) {

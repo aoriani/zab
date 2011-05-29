@@ -7,15 +7,16 @@ import org.apache.log4j.Logger;
 import br.unicamp.ic.zab.Leader;
 import br.unicamp.ic.zab.Packet;
 
-public class CommitStage extends Thread implements PipelineStage {
+public class SendCommitStage extends Thread implements PipelineStage {
 
-    private static final Logger LOG = Logger.getLogger(CommitStage.class);
+    private static final Logger LOG = Logger.getLogger(SendCommitStage.class);
 
     private Leader leader;
     private LinkedBlockingQueue<Packet> tobeCommitted = new LinkedBlockingQueue<Packet>();
     private PipelineStage nextStage;
 
-    public CommitStage(Leader leader, PipelineStage nextStage){
+    public SendCommitStage(Leader leader, PipelineStage nextStage){
+        super("SendCommiStage");
         this.leader = leader;
         this.nextStage = nextStage;
     }
@@ -38,7 +39,7 @@ public class CommitStage extends Thread implements PipelineStage {
                 }
                 // Create the commit packet
                 Packet commitPacket = Packet.createCommit(proposal
-                        .getProposalID());
+                        .getProposalId());
                 leader.sendPacketToFollowers(commitPacket);
                 nextStage.receiveFromPreviousStage(proposal);
             }
