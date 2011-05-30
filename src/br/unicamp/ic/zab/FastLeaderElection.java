@@ -27,7 +27,6 @@ import java.util.concurrent.TimeUnit;
 import org.apache.log4j.Logger;
 
 import br.unicamp.ic.zab.QuorumCnxManager.Message;
-import br.unicamp.ic.zab.QuorumPeer.QuorumServer;
 import br.unicamp.ic.zab.QuorumPeer.ServerState;
 
 
@@ -480,7 +479,7 @@ public class FastLeaderElection  {
      * Send notifications to all peers upon a change in our vote
      */
     private void sendNotifications() {
-        for (QuorumServer server : self.getView().values()) {
+        for (QuorumServerSettings server : self.getView().values()) {
             long sid = server.id;
 
             ToSend notmsg = new ToSend(ToSend.mType.notification,

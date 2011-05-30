@@ -18,7 +18,6 @@
 
 package br.unicamp.ic.zab;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.Map;
@@ -40,28 +39,6 @@ import org.apache.log4j.Logger;
 
 public class QuorumPeer extends Thread {
     private static final Logger LOG = Logger.getLogger(QuorumPeer.class);
-
-    public static class QuorumServer {
-        public InetSocketAddress addr;
-
-        public InetSocketAddress electionAddr;
-
-        public long id;
-
-        public QuorumServer(long id, InetSocketAddress addr) {
-            this.id = id;
-            this.addr = addr;
-            this.electionAddr = null;
-        }
-
-        public QuorumServer(long id, InetSocketAddress addr,
-                InetSocketAddress electionAddr) {
-            this.id = id;
-            this.addr = addr;
-            this.electionAddr = electionAddr;
-        }
-
-    }
 
     public enum ServerState {
         LOOKING, FOLLOWING, LEADING
@@ -109,7 +86,7 @@ public class QuorumPeer extends Thread {
     /**
     * The servers that make up the cluster
     */
-    Map<Long, QuorumServer> quorumPeers;
+    Map<Long, QuorumServerSettings> quorumPeers;
 
     volatile boolean running = true;
 
@@ -132,8 +109,8 @@ public class QuorumPeer extends Thread {
     private Callback callback;
 
 
-    public QuorumPeer(Map<Long, QuorumServer> quorumPeers, long myid,
-            int tickTime, int initLimit, int syncLimit) throws IOException {
+    public QuorumPeer(Map<Long, QuorumServerSettings> quorumPeers, long myid,
+            int tickTime, int initLimit, int syncLimit, Callback callback) {
         super("QuorumPeer");
         this.quorumPeers = quorumPeers;
         this.myid = myid;
@@ -141,6 +118,7 @@ public class QuorumPeer extends Thread {
         this.initLimit = initLimit;
         this.syncLimit = syncLimit;
         this.quorumConfig = new QuorumVerifier(quorumPeers.size());
+        this.callback = callback;
     }
 
     protected FastLeaderElection createElectionAlgorithm() {
@@ -236,7 +214,7 @@ public class QuorumPeer extends Thread {
     * A 'view' is a node's current opinion of the membership of the entire
     * ensemble.
     */
-    public Map<Long, QuorumPeer.QuorumServer> getView() {
+    public Map<Long, QuorumServerSettings> getView() {
         return Collections.unmodifiableMap(this.quorumPeers);
     }
 
@@ -259,6 +237,7 @@ public class QuorumPeer extends Thread {
                 case LOOKING:
                     try {
                         LOG.info("LOOKING");
+                        currentState = null;
                         setCurrentVote(electionAlg.lookForLeader());
                     } catch (Exception e) {
                         LOG.warn("Unexpected exception", e);
@@ -321,7 +300,7 @@ public class QuorumPeer extends Thread {
         state = newState;
     }
 
-    public void setQuorumPeers(Map<Long, QuorumServer> quorumPeers) {
+    public void setQuorumPeers(Map<Long, QuorumServerSettings> quorumPeers) {
         this.quorumPeers = quorumPeers;
     }
 
@@ -370,7 +349,7 @@ public class QuorumPeer extends Thread {
 
     public synchronized void startLeaderElection() {
         currentVote = new Vote(myid, getLastLoggedZxid());
-        for (QuorumServer p : getView().values()) {
+        for (QuorumServerSettings p : getView().values()) {
             if (p.id == myid) {
                 myQuorumAddr = p.addr;
                 break;
@@ -397,9 +376,20 @@ public class QuorumPeer extends Thread {
         return getTickTime() * getSyncLimit();
     }
 
+    public synchronized boolean propose(byte[] proposal) throws InterruptedException{
+        if(state != ServerState.LOOKING && currentState!=null){
+            currentState.propose(proposal);
+            return true;
+        }else{
+            return false;
+        }
+    }
+
     public void deliver(byte[] payload) {
         long start = System.currentTimeMillis();
-        callback.deliver(payload);
+        if(callback != null) {
+            callback.deliver(payload);
+        }
         long end = System.currentTimeMillis();
         LOG.debug("Delivery took " + (end-start) + "ms");
 

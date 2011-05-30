@@ -272,7 +272,7 @@ public class Leader implements PeerState {
                     try {
                         Socket followerSocket = leaderSocket.accept();
                         followerSocket.setSoTimeout(thisPeer.getDesirableSocketTimeout());
-                        followerSocket.setTcpNoDelay(Settings.TCP_NODELAY);
+                        followerSocket.setTcpNoDelay(Config.getInstance().getTcpDelay());
                         FollowerHandler handler = new FollowerHandler(Leader.this,followerSocket);
                         handler.start();
                     } catch (SocketException e) {

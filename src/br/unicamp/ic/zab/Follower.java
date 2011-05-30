@@ -12,7 +12,6 @@ import java.util.concurrent.CountDownLatch;
 
 import org.apache.log4j.Logger;
 
-import br.unicamp.ic.zab.QuorumPeer.QuorumServer;
 import br.unicamp.ic.zab.stages.DeliverStage;
 import br.unicamp.ic.zab.stages.WaitingCommitStage;
 
@@ -38,10 +37,10 @@ public class Follower implements PeerState {
         thisPeer = peer;
     }
 
-    private QuorumServer discoverLeader(){
-        QuorumServer result = null;
+    private QuorumServerSettings discoverLeader(){
+        QuorumServerSettings result = null;
         long leaderId = thisPeer.getCurrentVote().id;
-        for(QuorumServer qs: thisPeer.getView().values()){
+        for(QuorumServerSettings qs: thisPeer.getView().values()){
             if(qs.id == leaderId){
                 result = qs;
                 break;
@@ -74,15 +73,16 @@ public class Follower implements PeerState {
             throw e;
         }
         InetSocketAddress leaderAddress = address;
-        int backoff = Settings.FOLLOWER_INITIAL_BACKOFF;
+        int backoff = Config.getInstance().getFollowerInitialBackoff();
+        final int maxConnAttempts = Config.getInstance().getFollowerMaxConnAttempts();
 
-        for(int attempt = 1; attempt <= Settings.FOLLOWER_MAX_ATTEMPS_CONNECT; attempt++){
+        for(int attempt = 1; attempt <= maxConnAttempts; attempt++){
             try {
                 socket.connect(leaderAddress, socketTimeout);
-                socket.setTcpNoDelay(Settings.TCP_NODELAY);
+                socket.setTcpNoDelay(Config.getInstance().getTcpDelay());
                 break;
             } catch (IOException e) {
-                if (attempt == Settings.FOLLOWER_MAX_ATTEMPS_CONNECT){
+                if (attempt == maxConnAttempts){
                     LOG.error("Could not connect to leader", e);
                     throw e;
                 }else{
@@ -118,7 +118,7 @@ public class Follower implements PeerState {
         *
         */
         try {
-            QuorumServer leaderServer = discoverLeader();
+            QuorumServerSettings leaderServer = discoverLeader();
             socketToLeader = connectToLeader(leaderServer.addr);
             toLeaderStream = new DataOutputStream(new BufferedOutputStream(socketToLeader.getOutputStream()));
             fromLeaderStream = new DataInputStream(new BufferedInputStream(socketToLeader.getInputStream()));
