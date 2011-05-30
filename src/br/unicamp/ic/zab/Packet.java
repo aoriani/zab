@@ -9,7 +9,7 @@ import java.util.Arrays;
 import org.apache.log4j.Logger;
 
 /**
- * The atomic unit of the leader-followe protocol
+ * The atomic unit of the leader-follower protocol
  * @author Andre
  *
  */

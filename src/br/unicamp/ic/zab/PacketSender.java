@@ -30,6 +30,7 @@ public class PacketSender extends Thread {
     }
 
     public void enqueuePacket(Packet packet) throws InterruptedException{
+        LOG.debug("Putting in the queue to be sent: " + packet);
         outgoingPacketQueue.put(packet);
     }
 
@@ -39,7 +40,7 @@ public class PacketSender extends Thread {
             try {
                 Packet packet = outgoingPacketQueue.poll();
                 if (packet == null) {
-                    // We have not more packet to sent. Flush stream and
+                    // We have no more packet to send. Flush stream and
                     // wait for next packet
                     outputStream.flush();
                     packet = outgoingPacketQueue.take();

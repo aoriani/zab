@@ -13,7 +13,7 @@ import java.util.Properties;
 import org.apache.log4j.Logger;
 
 /**
- * A class to store settings
+ * This holds the configuration data of the protocol
  *
  * @author Andre
  *
@@ -22,12 +22,16 @@ import org.apache.log4j.Logger;
 public class Config {
     private static final Logger LOG = Logger.getLogger(Config.class);
 
+    /** Name of file that holds the config data*/
     private static final String CONF_FILE = "zab.config";
 
-
+    /**The duration of tick in milliseconds */
     private static final String TICK_TIME_KEY = "tickTime";
+    /**Number of tick that should take a leader to have quorum*/
     private static final String INIT_LIMIT_KEY = "initLimit";
+    /**Maximum  number of tick a follower may be behind to be considered synced*/
     private static final String SYNC_LIMIT_KEY = "syncLimit";
+    /**The addresses for quorum servers in the format &lt;host&gt;:&lt;protocol port&gt;:&lt;election port&gt;*/
     private static final String SERVER_KEY_PREFIX = "server.";
     /** Whether disable Nagle's Algorithm for TCP, improving latency for small packets */
     private static final String TCP_NODELAY_KEY = "tcpDelay";
@@ -35,8 +39,6 @@ public class Config {
     private static final String FOLLOWER_MAX_ATTEMPS_CONNECT_KEY = "followerMaxConnAttempts";
     /** Initial time for the exponential backoff of follower connecting to leader */
     private static final String FOLLOWER_INITIAL_BACKOFF_KEY = "followerInitialBackoff";
-
-
 
     private int tickTime = 200;
     private int syncLimit = 2;

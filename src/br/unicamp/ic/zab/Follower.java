@@ -23,11 +23,9 @@ public class Follower implements PeerState {
     private PacketSender packetSender;
 
     private DataOutputStream toLeaderStream;
-
     private DataInputStream fromLeaderStream;
 
     private DeliverStage deliverStage;
-
     private WaitingCommitStage waitingCommitStage;
 
     CountDownLatch readyForProposalsLatch = new CountDownLatch(1) ;
@@ -236,7 +234,7 @@ public class Follower implements PeerState {
         thisPeer.deliver(payload);
     }
 
-    //TODO: should this be syncronized to ensure order in the calls
+    //TODO: should this be synchronized to ensure order in the calls
     public synchronized void sendPacketToLeader(Packet packet) throws InterruptedException{
         if(packetSender != null){
             LOG.debug("Sending packet to leader: " + packet);
@@ -245,8 +243,8 @@ public class Follower implements PeerState {
     }
 
     @Override
-    public void propose(byte[] proposal) throws InterruptedException {
-        //Wait until leader is ready to send proposal
+    public synchronized void propose(byte[] proposal) throws InterruptedException {
+        //Wait until follower is ready to send proposal
         readyForProposalsLatch.await();
         Packet request = Packet.createRequest(proposal);
         sendPacketToLeader(request);

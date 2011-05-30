@@ -228,53 +228,50 @@ public class QuorumPeer extends Thread {
 
         LOG.debug("Starting quorum peer");
 
-        try {
-            /*
-            * Main loop
-            */
-            while (running) {
-                switch (getPeerState()) {
-                case LOOKING:
-                    try {
-                        LOG.info("LOOKING");
-                        currentState = null;
-                        setCurrentVote(electionAlg.lookForLeader());
-                    } catch (Exception e) {
-                        LOG.warn("Unexpected exception", e);
-                        setPeerState(ServerState.LOOKING);
-                    }
-                    break;
-                case FOLLOWING:
-                    try {
-                        LOG.info("FOLLOWING");
-                        currentState = new Follower(this);
-                        currentState.execute();
-                    } catch (Exception e) {
-                        LOG.warn("Unexpected exception", e);
-                    } finally {
-                        currentState.shutdown();
-                        currentState = null;
-                        setPeerState(ServerState.LOOKING);
-                    }
-                    break;
-                case LEADING:
-                    LOG.info("LEADING");
-                    try {
-                        currentState = new Leader(this);
-                        currentState.execute();
-                    } catch (Exception e) {
-                        LOG.warn("Unexpected exception", e);
-                    } finally {
-                        currentState.shutdown();
-                        currentState = null;
-                        setPeerState(ServerState.LOOKING);
-                    }
-                    break;
+        /*
+        * Main loop
+        */
+        while (running) {
+            switch (getPeerState()) {
+            case LOOKING:
+                try {
+                    LOG.info("LOOKING");
+                    currentState = null;
+                    setCurrentVote(electionAlg.lookForLeader());
+                } catch (Exception e) {
+                    LOG.warn("Unexpected exception", e);
+                    setPeerState(ServerState.LOOKING);
                 }
+                break;
+            case FOLLOWING:
+                try {
+                    LOG.info("FOLLOWING");
+                    currentState = new Follower(this);
+                    currentState.execute();
+                } catch (Exception e) {
+                    LOG.warn("Unexpected exception", e);
+                } finally {
+                    currentState.shutdown();
+                    currentState = null;
+                    setPeerState(ServerState.LOOKING);
+                }
+                break;
+            case LEADING:
+                LOG.info("LEADING");
+                try {
+                    currentState = new Leader(this);
+                    currentState.execute();
+                } catch (Exception e) {
+                    LOG.warn("Unexpected exception", e);
+                } finally {
+                    currentState.shutdown();
+                    currentState = null;
+                    setPeerState(ServerState.LOOKING);
+                }
+                break;
             }
-        } finally {
-
         }
+
     }
 
     public synchronized void setCurrentVote(Vote v) {
@@ -385,7 +382,7 @@ public class QuorumPeer extends Thread {
         }
     }
 
-    public void deliver(byte[] payload) {
+    public synchronized void deliver(byte[] payload) {
         long start = System.currentTimeMillis();
         if(callback != null) {
             callback.deliver(payload);

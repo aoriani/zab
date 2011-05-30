@@ -50,6 +50,8 @@ public class Leader implements PeerState {
 
     /**List of handler for connected followers*/
     List<FollowerHandler> followers = new LinkedList<FollowerHandler>();
+    /**List of handler for synced followers*/
+    List<FollowerHandler> syncedFollowers = new LinkedList<FollowerHandler>();
 
     /**The proposal id that is increment at each new proposal*/
     AtomicLong currentProposalId;
@@ -138,7 +140,8 @@ public class Leader implements PeerState {
 
         //set a new epoch
         long previousEpoch = thisPeer.getLastLoggedZxid() >> 32L;//Bring 4 higher bytes to lower bytes
-        long nextEpoch = (++previousEpoch) << 32L; //Increment and bring back
+        long nextEpoch = (previousEpoch + 1) << 32L; //Increment and bring back
+        LOG.debug("Moving to a new epoch: " + previousEpoch + "=>" + nextEpoch);
         currentProposalId.set(nextEpoch);
 
         //Create the new leader
@@ -156,9 +159,8 @@ public class Leader implements PeerState {
         // We have to get at least a majority of servers in sync with
         // us. We do this by waiting for the NEWLEADER packet to get
         // acknowledged
-        while (!thisPeer.getQuorumVerifier().containsQuorum(
-                newLeaderProposalAckSet)) {
-            if (tick > thisPeer.getSyncLimit()) {
+        while (!thisPeer.getQuorumVerifier().containsQuorum(newLeaderProposalAckSet)) {
+            if (tick > thisPeer.getInitLimit()) {
                 // Follower are not syncing fast enough
                 // renounce leadership
                 if (LOG.isInfoEnabled()) {
@@ -176,7 +178,6 @@ public class Leader implements PeerState {
                     followerSet.add(f.getId());
 
                 if (this.getQuorumVerifier().containsQuorum(followerSet)) {
-                    // if (followers.size() >= self.quorumPeers.size() / 2) {
                     LOG.warn("Enough followers present. "
                             + "Perhaps the initTicks need to be increased.");
                 }
@@ -248,6 +249,11 @@ public class Leader implements PeerState {
             proposalStage.shutdown();
         }
 
+        synchronized(followers){
+        	for(FollowerHandler follower:followers){
+        		follower.shutdown();
+        	}
+        }
     }
 
 
@@ -296,19 +302,16 @@ public class Leader implements PeerState {
         }
     }
 
-
-    public long getLastProposalId() {
+    public synchronized long getLastProposalId() {
         long proposalId = currentProposalId.get();
         return proposalId;
     }
 
-    public long getNextProposalId(){
+    public synchronized long getNextProposalId(){
         //TODO: How to control the number of inFlightPackets;
         long proposalId = currentProposalId.incrementAndGet();
         return proposalId;
     }
-
-
 
     public synchronized void processAcknowledge(long serverId, long proposalId)
         throws InterruptedException {
@@ -335,6 +338,13 @@ public class Leader implements PeerState {
         }
     }
 
+    public void addSyncedFollower(FollowerHandler followerHandler) {
+        synchronized(syncedFollowers){
+            syncedFollowers.add(followerHandler);
+        }
+    }
+
+
     /**
      * Removes handler to follower from leader's list
      * @param followerHandler the handler to be removed
@@ -342,6 +352,9 @@ public class Leader implements PeerState {
     public void removeFollowerHandler(FollowerHandler followerHandler) {
         synchronized(followers){
             followers.remove(followerHandler);
+        }
+        synchronized(syncedFollowers){
+            syncedFollowers.remove(followerHandler);
         }
     }
 
@@ -354,7 +367,7 @@ public class Leader implements PeerState {
      */
     public void sendPacketToFollowers(Packet packet) throws InterruptedException {
         //FIXME: Only send to synced followers
-        synchronized(followers){
+        synchronized(syncedFollowers){
             for(FollowerHandler handler:followers){
                 handler.queuePacketToFollower(packet);
             }
@@ -400,7 +413,6 @@ public class Leader implements PeerState {
         proposalStage.receiveFromPreviousStage(proposal);
     }
 
-
     public long getTick(){
         return tick;
     }
@@ -408,5 +420,4 @@ public class Leader implements PeerState {
     public long getSyncLimit(){
         return thisPeer.getSyncLimit();
     }
-
 }

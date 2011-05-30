@@ -25,6 +25,8 @@ public class FollowerHandler extends Thread {
         super("FollowerHandler " + followerSocket.getRemoteSocketAddress());
         this.leader = leader;
         this.socket = followerSocket;
+        //TODO: latter added it to the set of synced followers
+        //leader will have to only send packet to the synced set
         leader.addFollowerHandler(this);
     }
 
@@ -84,9 +86,12 @@ public class FollowerHandler extends Thread {
             toFollowerStream.flush();
 
             //start send queued packets
+            //TODO When implementing sync, ensure packet will not be lost
+            //because we create the packet sender only now;
             packetSender = new PacketSender(socket,toFollowerStream,serverId);
             packetSender.start();
 
+            leader.addSyncedFollower(this);
             handleIncommingPacket();
         } catch (IOException e) {
             if (socket != null && !socket.isClosed()) {
@@ -110,12 +115,9 @@ public class FollowerHandler extends Thread {
     }
 
     private void handleIncommingPacket() throws IOException, InterruptedException {
-        while(true){
-
+    	while(true){
             tickOfLastAck = leader.getTick();
-
             Packet packet = Packet.fromStream(fromFollowerStream);
-
             LOG.debug("Received packet from "+serverId+": "+packet);
 
             switch(packet.getType()){
@@ -130,7 +132,6 @@ public class FollowerHandler extends Thread {
                     //This packet only keep socket open and verify liveness
                 break;
             }
-
         }
     }
 
@@ -149,15 +150,6 @@ public class FollowerHandler extends Thread {
 
         LOG.debug("Shuting down follower handler for " + serverId);
 
-        //Free streams and socket
-        if(socket!= null && !socket.isClosed()){
-            try {
-                socket.close();
-            } catch (IOException e) {
-                LOG.warn("Ignoring exception when closing socket",e);
-            }
-        }
-
         try {
             if(packetSender != null){
                 //Ensure we finish the sender thread
@@ -165,6 +157,15 @@ public class FollowerHandler extends Thread {
             }
         } catch (InterruptedException e) {
             LOG.warn("Ignoring unexpected exception", e);
+        }
+
+        //Free streams and socket
+        if(socket!= null && !socket.isClosed()){
+            try {
+                socket.close();
+            } catch (IOException e) {
+                LOG.warn("Ignoring exception when closing socket",e);
+            }
         }
 
         interrupt(); //stop the thread
