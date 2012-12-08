@@ -169,7 +169,8 @@ public class Leader implements PeerState {
                     for (Long server : newLeaderProposalAckSet) {
                         builder.append(server).append(" ");
                     }
-                    builder.append("} . So no quorum, renouncing leadership");
+                    builder.append("} after ").append(tick).append(". So no quorum, renouncing leadership");
+                    LOG.info(builder.toString());
                 }
                 shutdown();
 
@@ -235,6 +236,8 @@ public class Leader implements PeerState {
      */
     @Override
     public void shutdown() {
+        LOG.info("Shutting down leader");
+        Thread.dumpStack();
 
         if(connectionAcceptor != null){
             connectionAcceptor.halt();
@@ -250,9 +253,9 @@ public class Leader implements PeerState {
         }
 
         synchronized(followers){
-        	for(FollowerHandler follower:followers){
-        		follower.shutdown();
-        	}
+            for(FollowerHandler follower:followers){
+                follower.shutdown();
+            }
         }
     }
 
@@ -285,7 +288,7 @@ public class Leader implements PeerState {
                         if(!run){
                             //When we shutdown the leader we close the socket
                             // so a exception is expected
-                            LOG.info("Exception while shuting down the leader",e);
+                            LOG.info("Exception while waiting for follower connctions",e);
                         }else{
                             throw e;
                         }

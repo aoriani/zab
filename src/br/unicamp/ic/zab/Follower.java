@@ -121,10 +121,15 @@ public class Follower implements PeerState {
             toLeaderStream = new DataOutputStream(new BufferedOutputStream(socketToLeader.getOutputStream()));
             fromLeaderStream = new DataInputStream(new BufferedInputStream(socketToLeader.getInputStream()));
 
-            registerWithLeader();
+            long  newLeaderProposalId = registerWithLeader();
             packetSender = new PacketSender(socketToLeader, toLeaderStream, leaderServer.id);
             packetSender.start();
             setupPipeline();
+            //TODO : when sync is implemented we can only ack new leader proposal when we sync
+            //Now we are ready send ack for leader proposal
+            packetSender.enqueuePacket(Packet.createAcknowledge(newLeaderProposalId));
+
+            //Okay , now we can start proposing
             readyForProposalsLatch.countDown();
             LOG.info("Follower is now ready to send proposals");
             handleIncommingPackets();
@@ -150,6 +155,7 @@ public class Follower implements PeerState {
     private void handleIncommingPackets() throws IOException, InterruptedException {
         while(true){
             Packet packet = Packet.fromStream(fromLeaderStream);
+            LOG.trace("Follower received: " + packet);
 
             switch(packet.getType()){
                 case PROPOSAL:
@@ -189,6 +195,7 @@ public class Follower implements PeerState {
                         "Got :" + newLeaderPacket);
             throw new IOException("The first packet sent by leader should be NEWLEADER.");
         }
+        LOG.trace("Received new leader proposal");
 
         //Sanity check the epoch of the new leader
         long followerEpoch = (lastLoggedProposalId >> 32L);

@@ -61,7 +61,7 @@ public class WaitingAckStage implements PipelineStage {
      * @param serverId the id of server that sent the ack
      * @throws InterruptedException
      */
-    public void processAck(long proposalId, long serverId) throws InterruptedException{
+    public void processAck(long serverId, long proposalId ) throws InterruptedException{
         synchronized(waitingQuorumProposal){
             Proposal proposal = waitingQuorumProposal.get(proposalId);
             if(proposal != null){

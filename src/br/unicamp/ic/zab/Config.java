@@ -83,7 +83,7 @@ public class Config {
 
         for (Entry<Object, Object> entry : properties.entrySet()){
             String key = entry.getKey().toString().trim();
-            String value = entry.getKey().toString().trim();
+            String value = entry.getValue().toString().trim();
 
             if(key.equals(TICK_TIME_KEY)){
                 tickTime = Integer.parseInt(value);

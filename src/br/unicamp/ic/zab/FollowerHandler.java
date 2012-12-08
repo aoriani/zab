@@ -78,6 +78,7 @@ public class FollowerHandler extends Thread {
                 return; //Finally blocks takes care of clean up
             }
             serverId = followerInfoPacket.getServerId();
+            LOG.info("Follower " + serverId + " has connected");
             //TODO: handler follower proposalID for sync with leader;
 
             //Send packet leader
@@ -115,7 +116,7 @@ public class FollowerHandler extends Thread {
     }
 
     private void handleIncommingPacket() throws IOException, InterruptedException {
-    	while(true){
+        while(true){
             tickOfLastAck = leader.getTick();
             Packet packet = Packet.fromStream(fromFollowerStream);
             LOG.debug("Received packet from "+serverId+": "+packet);
